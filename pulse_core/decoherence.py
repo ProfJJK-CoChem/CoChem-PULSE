@@ -29,7 +29,7 @@ def apply_granucci_persico_decoherence(
         C_param: Empirical decoherence constant (default 0.1 a.u. / Hartree).
         
     Returns:
-        Damped and re-normalized electronic amplitude array.
+        Damped and re-normalized electronic amplitude array (provenance_tag="[D]").
     """
     c = np.asarray(c_amplitudes, dtype=complex).copy()
     n_states = len(c)

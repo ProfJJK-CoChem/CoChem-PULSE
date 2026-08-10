@@ -3,7 +3,7 @@ Wigner Phase-Space Initial Condition Sampling Engine for Quantum Dynamics.
 """
 
 import logging
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Dict, Any
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -112,3 +112,131 @@ def sample_wigner(
         
     logger.info("Sampled %d Wigner initial conditions for %d atoms at T=%.1f K.", n_trajectories, n_atoms, temp)
     return sampled_coords, sampled_momenta
+
+
+def compute_inertia_tensor(coords: np.ndarray, masses: np.ndarray) -> np.ndarray:
+    """
+    Computes 3x3 inertia tensor I (in amu Angstrom^2) for 3D coordinates (Angstroms) and masses (amu).
+    Translates center of mass to origin before computing moment of inertia.
+    """
+    coords = np.asarray(coords, dtype=float)
+    masses = np.asarray(masses, dtype=float)
+    com = np.sum(coords * masses[:, np.newaxis], axis=0) / np.sum(masses)
+    r = coords - com
+    x, y, z = r[:, 0], r[:, 1], r[:, 2]
+    Ixx = np.sum(masses * (y**2 + z**2))
+    Iyy = np.sum(masses * (x**2 + z**2))
+    Izz = np.sum(masses * (x**2 + y**2))
+    Ixy = -np.sum(masses * x * y)
+    Ixz = -np.sum(masses * x * z)
+    Iyz = -np.sum(masses * y * z)
+    return np.array([[Ixx, Ixy, Ixz], [Ixy, Iyy, Iyz], [Ixz, Iyz, Izz]], dtype=float)
+
+
+def safe_invert_inertia_tensor(I: np.ndarray, tol_rel: float = 1e-4) -> np.ndarray:
+    """
+    Safely invert a 3x3 moment of inertia tensor I using spectral eigendecomposition.
+    Zeroes out axial/singular eigenvalues where lambda_k < tol_rel * lambda_max.
+    Prevents catastrophic floating-point overflow for near-singular or linear rotors.
+
+    Args:
+        I: Symmetric 3x3 inertia tensor array (amu Angstrom^2).
+        tol_rel: Relative tolerance threshold for singular eigenvalues (default 1e-4).
+
+    Returns:
+        3x3 inverse moment of inertia tensor mu = I^-1 (amu^-1 Angstrom^-2).
+    """
+    eigvals, V = np.linalg.eigh(I)
+    eig_max = np.max(eigvals)
+    if eig_max <= 0:
+        return np.zeros_like(I)
+    inv_eig = np.zeros_like(eigvals)
+    mask = eigvals >= tol_rel * eig_max
+    inv_eig[mask] = 1.0 / eigvals[mask]
+    return V @ np.diag(inv_eig) @ V.T
+
+
+def compute_vibrational_averaged_constants(
+    frames_coords: np.ndarray,
+    masses: np.ndarray,
+    tol_rel: float = 1e-4
+) -> Tuple[np.ndarray, np.ndarray, Dict[str, Any]]:
+    """
+    Computes B_e (from mean geometry) and B_0 (from frame-wise inverse inertia tensor average).
+    Strictly satisfies Jensen's inequality: <1/I> >= 1/<I> (§5.1).
+    
+    Conversion constant: h / (8 * pi^2 * amu * Angstrom^2) * 1e-6 = 505379.006 MHz amu Angstrom^2.
+    
+    Args:
+        frames_coords: 3D array of shape (N_frames, N_atoms, 3) or 2D single frame (N_atoms, 3).
+        masses: 1D array of atomic masses in amu.
+        tol_rel: Relative tolerance threshold for singular/axial eigenvalue inversion (default 1e-4).
+        
+    Returns:
+        Tuple (B_e_mhz, B_0_mhz, metadata):
+            - B_e_mhz: 1D array of equilibrium rotational constants [A_e, B_e, C_e] in MHz (descending).
+            - B_0_mhz: 1D array of zero-point vibrational ground-state constants [A_0, B_0, C_0] in MHz (descending).
+            - metadata: Dictionary containing averaging_method, provenance_tag, and jensen_satisfied flag.
+    """
+    CONV_MHZ = 505379.006
+    frames = np.asarray(frames_coords, dtype=float)
+    if frames.ndim == 2:
+        frames = frames[np.newaxis, :, :]
+        
+    masses = np.asarray(masses, dtype=float)
+    
+    # 1. Compute B_e from equilibrium/mean geometry <R>
+    mean_coords = np.mean(frames, axis=0)
+    I_eq = compute_inertia_tensor(mean_coords, masses)
+    eigvals_eq = np.sort(np.linalg.eigvalsh(I_eq))  # ascending [I_a, I_b, I_c]
+    eigvals_eq_pos = np.maximum(eigvals_eq, 1e-10)
+    B_e_mhz = np.sort(CONV_MHZ / eigvals_eq_pos)[::-1]  # descending [A_e, B_e, C_e]
+    
+    # 2. Compute frame-wise principal moments of inertia and inverse principal moments
+    I_eig_list = []
+    mu_eig_list = []
+    active_masks = []
+
+    for frame in frames:
+        I_t = compute_inertia_tensor(frame, masses)
+        eig_t = np.sort(np.linalg.eigvalsh(I_t))  # ascending [I_a, I_b, I_c]
+        eig_max_t = np.max(eig_t)
+
+        mu_t = np.zeros(3)
+        mask_t = eig_t >= tol_rel * eig_max_t
+        active_masks.append(mask_t)
+
+        if np.any(mask_t):
+            mu_t[mask_t] = 1.0 / eig_t[mask_t]
+
+        I_eig_list.append(eig_t)
+        mu_eig_list.append(mu_t)
+
+    # 3. Inverse of mean inertia tensor (<I>)^-1 for Jensen's inequality reference
+    I_avg_eig = np.mean(I_eig_list, axis=0)  # ascending [<I_a>, <I_b>, <I_c>]
+    eig_max_avg = np.max(I_avg_eig)
+
+    active_in_all = np.all(active_masks, axis=0)
+    mask_avg = (I_avg_eig >= tol_rel * eig_max_avg) & active_in_all
+
+    inv_I_avg_eig = np.zeros(3)
+    if np.any(mask_avg):
+        inv_I_avg_eig[mask_avg] = 1.0 / I_avg_eig[mask_avg]
+
+    B_inv_I_avg = np.sort(CONV_MHZ * inv_I_avg_eig)[::-1]  # descending [A_inv, B_inv, C_inv]
+
+    # 4. Frame-wise inverse inertia average <I^-1> (B_0)
+    mu_avg_eig = np.mean(mu_eig_list, axis=0)
+    B_0_mhz = np.sort(CONV_MHZ * mu_avg_eig)[::-1]  # descending [A_0, B_0, C_0]
+
+    # 5. Verify Jensen's Inequality compliance: <I^-1> >= (<I>)^-1 (§5.1)
+    jensen_satisfied = bool(np.all(B_0_mhz >= B_inv_I_avg - 1e-6))
+
+    meta = {
+        "averaging_method": "INVERSE_TENSOR_AVERAGE_JENSEN",
+        "provenance_tag": "[D]",
+        "jensen_satisfied": jensen_satisfied
+    }
+    return B_e_mhz, B_0_mhz, meta
+
+

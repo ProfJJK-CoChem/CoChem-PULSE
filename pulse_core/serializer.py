@@ -13,20 +13,20 @@ logger = logging.getLogger(__name__)
 def serialize_swarm_to_hdf5(
     filepath: str,
     swarm_data: Dict[str, Any],
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None,
+    state_chaining: Optional[Dict[str, Any]] = None,
+    rotational_constants: Optional[Dict[str, Any]] = None
 ) -> None:
     """
-    Serializes swarm trajectory histories, velocities, populations, and hopping logs into HDF5 state format.
+    Serializes swarm trajectory histories, state chaining pipeline fields,
+    rotational constants (Jensen inverse inertia average), and provenance metadata into HDF5.
     
     Args:
         filepath: Target HDF5 file path (e.g. cochem_state.h5).
-        swarm_data: Dictionary containing:
-            - 'coordinates': 4D array (n_trajectories, n_frames, n_atoms, 3)
-            - 'velocities': 4D array (n_trajectories, n_frames, n_atoms, 3)
-            - 'populations': 3D array (n_trajectories, n_frames, n_states)
-            - 'hopping_events': List or 2D array of hop records
-            - 'random_seeds': 1D array of trajectory seeds
-        metadata: Additional metadata dictionary for dataset attributes.
+        swarm_data: Dictionary containing coordinates, velocities, populations, hopping_events, etc.
+        metadata: General swarm metadata attributes.
+        state_chaining: Dict containing state_in, state_out, inherited_geometry_hash, inherited_hessian_file.
+        rotational_constants: Dict containing B_e_mhz, B_0_mhz, averaging_method, provenance_tag.
     """
     with h5py.File(filepath, "a") as h5:
         group_path = "pulse/trajectories"
@@ -35,20 +35,43 @@ def serialize_swarm_to_hdf5(
             
         grp = h5.create_group(group_path)
         
+        # 1. Trajectory Datasets
         for key in ["coordinates", "velocities", "populations", "random_seeds"]:
             if key in swarm_data and swarm_data[key] is not None:
                 data_arr = np.asarray(swarm_data[key])
-                grp.create_dataset(key, data=data_arr, compression="gzip")
+                ds = grp.create_dataset(key, data=data_arr, compression="gzip")
+                if key == "populations":
+                    ds.attrs["provenance_tag"] = swarm_data.get("provenance_tag", "[D]")
                 
         if "hopping_events" in swarm_data and swarm_data["hopping_events"] is not None:
             hop_data = np.asarray(swarm_data["hopping_events"])
-            grp.create_dataset("hopping_events", data=hop_data)
-            
-        # Metadata attributes (PULSE-17 & Base/Topos matrix standard)
+            hop_ds = grp.create_dataset("hopping_events", data=hop_data)
+            hop_ds.attrs["provenance_tag"] = swarm_data.get("provenance_tag", "[D]")
+
+        # 2. State-Chaining Pipeline Subgroup (§8B / PULSE-03)
+        sc_grp = grp.create_group("state_chaining")
+        sc_info = state_chaining or swarm_data.get("state_chaining", {})
+        sc_grp.attrs["state_in"] = sc_info.get("state_in", "T2-3h_r2SCAN-3c_TightOpt")
+        sc_grp.attrs["state_out"] = sc_info.get("state_out", "T4-1d_FSSH_Trajectory")
+        sc_grp.attrs["inherited_geometry_hash"] = sc_info.get("inherited_geometry_hash", "sha256_none")
+        sc_grp.attrs["inherited_hessian_file"] = sc_info.get("inherited_hessian_file", "none")
+        
+        # 3. Rotational Constants Subgroup (§5.1 / PULSE-03)
+        rc_grp = grp.create_group("rotational_constants")
+        rc_info = rotational_constants or swarm_data.get("rotational_constants", {})
+        if "B_e_mhz" in rc_info and rc_info["B_e_mhz"] is not None:
+            rc_grp.create_dataset("B_e_mhz", data=np.asarray(rc_info["B_e_mhz"]))
+        if "B_0_mhz" in rc_info and rc_info["B_0_mhz"] is not None:
+            rc_grp.create_dataset("B_0_mhz", data=np.asarray(rc_info["B_0_mhz"]))
+        rc_grp.attrs["averaging_method"] = rc_info.get("averaging_method", "INVERSE_TENSOR_AVERAGE_JENSEN")
+        rc_grp.attrs["provenance_tag"] = rc_info.get("provenance_tag", "[D]")
+
+        # 4. Global Metadata Attributes
         meta = metadata or {}
         grp.attrs["LAM_TRIGGER_REQUIRED"] = meta.get("LAM_TRIGGER_REQUIRED", False)
         grp.attrs["symmetry_group"] = meta.get("symmetry_group", "C1")
         grp.attrs["timestamp"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        grp.attrs["version"] = meta.get("version", "1.0.0")
+        grp.attrs["version"] = meta.get("version", "4.0.0")
+        grp.attrs["provenance_tag"] = swarm_data.get("provenance_tag", "[D]")
         
-    logger.info("Successfully serialized swarm trajectory data to HDF5 file: %s", filepath)
+    logger.info("Successfully serialized swarm trajectory data, state chaining, and rotational constants to HDF5: %s", filepath)

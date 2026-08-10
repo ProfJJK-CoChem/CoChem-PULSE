@@ -14,8 +14,9 @@ def _load_system_config() -> Dict[str, Any]:
     if config_env:
         config_paths.append(Path(config_env))
     config_paths.extend([
-        Path("cochem_setup/cochem_system_config.json"),
+        Path(__file__).resolve().parents[2] / "cochem_system_config.json",
         Path("cochem_system_config.json"),
+        Path("cochem_setup/cochem_system_config.json"),
         Path.home() / ".cochem" / "cochem_system_config.json"
     ])
     
@@ -31,16 +32,20 @@ def _load_system_config() -> Dict[str, Any]:
 def dispatch_swarm_to_node(
     wigner_seeds: Tuple[np.ndarray, np.ndarray],
     engine: Optional[str] = None,
-    config: Optional[Dict[str, Any]] = None
+    config: Optional[Dict[str, Any]] = None,
+    use_mps: bool = True,
+    thread_percentage: int = 25
 ) -> List[Dict[str, Any]]:
     """
-    Formats 100+ separate execution payloads and hands them to NODE with the [CPU_DIST] tag.
+    Formats 100+ separate execution payloads and hands them to NODE with the [CPU_DIST] and [CUDA_MPS] tags.
     Reinstates AIMNet2-NSE / sTDA / FOMO-CI for Non-Adiabatic Surface Hopping (NASH) molecular dynamics.
     
     Args:
         wigner_seeds: Tuple of (coords, momenta) arrays.
         engine: Dynamics engine identifier ("AIMNet2-NSE", "sTDA", "FOMO-CI"). If None, resolved from config.
         config: Optional configuration dictionary override.
+        use_mps: Whether CUDA MPS co-scheduling is enabled.
+        thread_percentage: GPU thread percentage per worker process.
         
     Returns:
         List of formatted job payload dictionaries.
@@ -93,10 +98,14 @@ def dispatch_swarm_to_node(
             "coordinates": coord_list,
             "momenta": momenta_list,
             "engine": selected_engine,
-            "tags": ["[CPU_DIST]", "[NASH]"]
+            "tags": ["[CPU_DIST]", "[NASH]", "[CUDA_MPS]"],
+            "mps_config": {
+                "use_mps": use_mps,
+                "thread_percentage": thread_percentage
+            }
         }
         jobs.append(job)
         
     # PULSE-10: Use structured logging instead of raw print
-    logger.info("Dispatched %d NASH %s trajectories to swarm.", len(jobs), selected_engine)
+    logger.info("Dispatched %d NASH %s trajectories to swarm with CUDA MPS co-scheduling.", len(jobs), selected_engine)
     return jobs

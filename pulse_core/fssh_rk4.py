@@ -67,10 +67,12 @@ def evaluate_hop(
     dt: float,
     E_kin_nacv: Optional[float] = None,
     delta_V: Optional[float] = None,
-    random_r: Optional[float] = None
+    random_r: Optional[float] = None,
+    rng: Optional[Any] = None
 ) -> Tuple[int, bool]:
     """
     Evaluates FSSH hopping probabilities from current_state to all other states.
+    Uses deterministic seeded RNG (MOCK-23 / Suggestion 88).
     
     PULSE-20: Includes potential energy difference check (delta_V) against kinetic energy along NACV (E_kin_nacv).
     
@@ -99,11 +101,16 @@ def evaluate_hop(
     if total_prob <= 0.0:
         return current_state, False
 
-    if random_r is None:
-        rng = np.random.default_rng()
-        r = float(rng.random())
+    if random_r is not None:
+        r = float(random_r)
+    elif rng is not None:
+        if isinstance(rng, np.random.Generator):
+            r = float(rng.random())
+        else:
+            r = float(np.random.default_rng(rng).random())
     else:
-        r = random_r
+        # Enforce deterministic default seed 42 to prevent unseeded non-reproducible calls
+        r = float(np.random.default_rng(42).random())
 
     cum_prob = 0.0
     target_state = current_state
