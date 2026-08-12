@@ -1,7 +1,8 @@
+from typing import Any, Dict, List, Optional
 """
 Empirical Stress Test Suite for Milestone 4 (CoChem-KINETIC & CoChem-PULSE).
 Validates:
-1. Landau-Zener probability formula at zero coupling (v12=0 => P_diab=1.0).
+    1. Landau-Zener probability formula at zero coupling (v12=0 => P_diab=1.0).
 2. VTST bottleneck search and Troe fall-off pressure dependencies.
 3. FSSH surface hopping trajectory propagation for bit-for-bit reproducibility when passing identical seeds.
 4. Velocity Verlet MD trajectory integration for energy conservation (delta E / E < 10^-4) over 500 steps.
@@ -20,7 +21,7 @@ from pulse_core.dispatcher import PulseDispatcher
 from pulse_core.aimnet2_nse import AIMNet2NSECalculator
 
 
-def test_landau_zener_zero_coupling_empirical():
+def test_landau_zener_zero_coupling_empirical() -> None:
     """1. Test Landau-Zener probability formula at zero coupling (v12=0 => P_diab=1.0)."""
     p_diab_zero = landau_zener_probability(v12=0.0, force_diff=1.0, velocity=1e5, return_type="diabatic")
     p_adiab_zero = landau_zener_probability(v12=0.0, force_diff=1.0, velocity=1e5, return_type="adiabatic")
@@ -42,7 +43,7 @@ def test_landau_zener_zero_coupling_empirical():
     assert p_zero_vel == 1.0, f"Expected P_diab=1.0 for velocity=0, got {p_zero_vel}"
 
 
-def test_vtst_and_troe_dependencies_empirical():
+def test_vtst_and_troe_dependencies_empirical() -> None:
     """2. Test VTST bottleneck search and Troe fall-off pressure dependencies."""
     # 2A. VTST Bottleneck Search
     s_coords = np.linspace(-1.0, 1.0, 21)
@@ -79,7 +80,7 @@ def test_vtst_and_troe_dependencies_empirical():
     assert is_monotonic, "Troe fall-off rate must increase monotonically with pressure"
 
 
-def test_fssh_bit_for_bit_reproducibility_empirical():
+def test_fssh_bit_for_bit_reproducibility_empirical() -> None:
     """3. Test FSSH surface hopping trajectory propagation for bit-for-bit reproducibility when passing identical seeds."""
     ref_coords = np.array([
         [0.0, 0.0, 0.0],
@@ -126,7 +127,7 @@ def test_fssh_bit_for_bit_reproducibility_empirical():
     assert not np.array_equal(res1["coordinates"], res3["coordinates"]), "Different seeds must produce different sampling"
 
 
-def test_velocity_verlet_energy_conservation_empirical():
+def test_velocity_verlet_energy_conservation_empirical() -> None:
     """4. Test Velocity Verlet MD trajectory integration for energy conservation (delta E / E < 10^-4) over 500 steps."""
     calc = AIMNet2NSECalculator(n_states=3)
     ref_coords = np.array([

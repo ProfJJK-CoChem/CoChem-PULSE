@@ -1,3 +1,5 @@
+import hashlib
+from typing import Any, Dict, List, Optional
 """
 Integration and Unit Tests for CoChem-PULSE Suite.
 """
@@ -15,7 +17,7 @@ from pulse_core.viz import plot_population_dynamics, render_trajectory_3d
 from pulse_core.serializer import serialize_swarm_to_hdf5
 from pulse_core.dispatcher import PulseDispatcher
 
-def test_swarm_manager_validation():
+def test_swarm_manager_validation() -> None:
     coords = np.zeros((10, 3, 3))
     momenta = np.zeros((10, 3, 3))
     
@@ -32,7 +34,7 @@ def test_swarm_manager_validation():
     with pytest.raises(ValueError):
         dispatch_swarm_to_node((coords[:5], momenta))
 
-def test_laser_simulation():
+def test_laser_simulation() -> None:
     t_grid = np.linspace(0, 100, 50)
     E_field, H_int = simulate_pump_pulse(
         field_amplitude=0.01,
@@ -44,7 +46,7 @@ def test_laser_simulation():
     assert len(E_field) == 50
     assert H_int.shape == (50, 2, 2)
 
-def test_nacv_and_velocity_scaling():
+def test_nacv_and_velocity_scaling() -> None:
     nacv = compute_nacv(
         grads_i=np.array([[0.1, 0.0, 0.0]]),
         grads_j=np.array([[0.3, 0.0, 0.0]]),
@@ -59,7 +61,7 @@ def test_nacv_and_velocity_scaling():
     assert success
     assert v_scaled.shape == (1, 3)
 
-def test_decoherence_and_kill_switch():
+def test_decoherence_and_kill_switch() -> None:
     c_amplitudes = np.array([0.707 + 0.0j, 0.707 + 0.0j], dtype=complex)
     E_potentials = np.array([0.0, 0.1])
     c_damped = apply_granucci_persico_decoherence(c_amplitudes, 0, E_potentials, E_kin=0.05, dt=0.1)
@@ -72,7 +74,7 @@ def test_decoherence_and_kill_switch():
     assert not check_dissociation(bound_coords)
     assert check_dissociation(dissoc_coords)
 
-def test_aimnet2_nse_calculator():
+def test_aimnet2_nse_calculator() -> None:
     from pulse_core.aimnet2_nse import AIMNet2NSECalculator, ModelNotLoadedError
     calc = AIMNet2NSECalculator(n_states=3)
     coords = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.2]])
@@ -83,7 +85,7 @@ def test_aimnet2_nse_calculator():
     assert issubclass(ModelNotLoadedError, Exception)
 
 
-def test_viz_and_dispatcher():
+def test_viz_and_dispatcher() -> None:
     import h5py
     dispatcher = PulseDispatcher()
     ref_coords = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
@@ -105,7 +107,7 @@ def test_viz_and_dispatcher():
             assert "pulse/trajectories/rotational_constants" in h5
 
 
-def test_aimnet2_nse_physical_gap_and_provenance():
+def test_aimnet2_nse_physical_gap_and_provenance() -> None:
     from pulse_core.aimnet2_nse import AIMNet2NSECalculator
     calc = AIMNet2NSECalculator(n_states=3)
     coords1 = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
@@ -121,7 +123,7 @@ def test_aimnet2_nse_physical_gap_and_provenance():
     assert calc.provenance_tag in ["[E]", "[M]", "[D]"]
 
 
-def test_jensen_inequality_rotational_constants():
+def test_jensen_inequality_rotational_constants() -> None:
     from pulse_core.wigner import compute_vibrational_averaged_constants, compute_inertia_tensor
     rng = np.random.default_rng(42)
     frames = rng.normal(0, 0.1, (50, 3, 3)) + np.array([[0, 0, 0], [0, 1, 0], [1, 0, 0]])
@@ -145,7 +147,7 @@ def test_jensen_inequality_rotational_constants():
     assert not np.allclose(B_0, B_inv_I_avg)
 
 
-def test_hdf5_state_chaining_and_rotational_constants():
+def test_hdf5_state_chaining_and_rotational_constants() -> None:
     import h5py
     from pulse_core.serializer import serialize_swarm_to_hdf5
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -181,7 +183,7 @@ def test_hdf5_state_chaining_and_rotational_constants():
             assert rc_grp.attrs["provenance_tag"] == "[D]"
 
 
-def test_cuda_mps_payload_config():
+def test_cuda_mps_payload_config() -> None:
     coords = np.zeros((2, 3, 3))
     momenta = np.zeros((2, 3, 3))
     jobs = dispatch_swarm_to_node((coords, momenta), engine="AIMNet2-NSE", use_mps=True, thread_percentage=25)
@@ -191,7 +193,7 @@ def test_cuda_mps_payload_config():
     assert jobs[0]["mps_config"]["thread_percentage"] == 25
 
 
-def test_diatomic_linear_rotor_jensen_inequality():
+def test_diatomic_linear_rotor_jensen_inequality() -> None:
     """
     Unit Test for 2-atom linear rotors (CO) verifying singular axial inertia tensor handling.
     Ensures safe_invert_inertia_tensor prevents floating point overflow and Loewner ordering mismatch.
@@ -221,3 +223,13 @@ def test_diatomic_linear_rotor_jensen_inequality():
 
 
 
+def calculate_artifact_sha256(filepath: str | Path) -> str:
+    """Calculates SHA-256 hash of a computational artifact."""
+    p = Path(filepath)
+    if not p.exists():
+        raise FileNotFoundError(f"Artifact file not found: {filepath}")
+    hasher = hashlib.sha256()
+    with open(p, "rb") as f:
+        while chunk := f.read(65536):
+            hasher.update(chunk)
+    return hasher.hexdigest()

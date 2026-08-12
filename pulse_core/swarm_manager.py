@@ -4,29 +4,19 @@ import os
 from pathlib import Path
 from typing import Tuple, List, Dict, Any, Optional
 import numpy as np
+from cochem_base.config_loader import resolve_config_path
 
 logger = logging.getLogger(__name__)
 
 def _load_system_config() -> Dict[str, Any]:
     """Load system configuration from registry or environment path."""
-    config_env = os.environ.get("COCHEM_SYSTEM_CONFIG")
-    config_paths = []
-    if config_env:
-        config_paths.append(Path(config_env))
-    config_paths.extend([
-        Path(__file__).resolve().parents[2] / "cochem_system_config.json",
-        Path("cochem_system_config.json"),
-        Path("cochem_setup/cochem_system_config.json"),
-        Path.home() / ".cochem" / "cochem_system_config.json"
-    ])
-    
-    for path in config_paths:
-        if path.exists():
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    return json.load(f)
-            except Exception as e:
-                logger.warning("Failed to load config from %s: %s", path, e)
+    target_path = resolve_config_path()
+    if target_path.exists():
+        try:
+            with open(target_path, "r", encoding="utf-8") as f:
+                return json.loads(f.read())
+        except Exception as e:
+            logger.warning("Failed to load config from %s: %s", target_path, e)
     return {}
 
 def dispatch_swarm_to_node(

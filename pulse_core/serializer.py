@@ -1,3 +1,4 @@
+import hashlib
 """
 HDF5 Provenance and Trajectory Swarm Serialization Engine for PULSE.
 """
@@ -75,3 +76,13 @@ def serialize_swarm_to_hdf5(
         grp.attrs["provenance_tag"] = swarm_data.get("provenance_tag", "[D]")
         
     logger.info("Successfully serialized swarm trajectory data, state chaining, and rotational constants to HDF5: %s", filepath)
+def calculate_artifact_sha256(filepath: str | Path) -> str:
+    """Calculates SHA-256 hash of a computational artifact."""
+    p = Path(filepath)
+    if not p.exists():
+        raise FileNotFoundError(f"Artifact file not found: {filepath}")
+    hasher = hashlib.sha256()
+    with open(p, "rb") as f:
+        while chunk := f.read(65536):
+            hasher.update(chunk)
+    return hasher.hexdigest()

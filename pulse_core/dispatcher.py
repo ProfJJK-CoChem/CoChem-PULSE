@@ -26,7 +26,7 @@ class PulseDispatcher:
     Non-Adiabatic Surface Hopping (NASH) trajectory dynamics.
     """
     
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
         self.config = config or {}
         self.aimnet2_calc = AIMNet2NSECalculator(n_states=3)
         
