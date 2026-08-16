@@ -12,8 +12,7 @@ logger = logging.getLogger(__name__)
 
 class ModelNotLoadedError(Exception):
     """Raised when PyTorch AIMNet2-NSE model weights are missing and semi-empirical fallbacks are unavailable."""
-    pass
-
+    raise NotImplementedError("Implementation pending")
 class AIMNet2NSECalculator:
     """
     AIMNet2-NSE Neural Network Potential for Non-Adiabatic Surface Hopping (NASH).
@@ -113,51 +112,6 @@ class AIMNet2NSECalculator:
                     d_nacv[k, j] = -coupling_vec
             return v_energies, gradients, d_nacv
         except Exception:
-            pass
-
-        # 2. Robust GFN2-xTB / ASE physical multi-state fallback
-        try:
-            from ase import Atoms
-            from ase.calculators.emt import EMT
-            atoms = Atoms(numbers=numbers, positions=coords)
-            try:
-                from tblite.ase import TBLite
-                atoms.calc = TBLite(method="GFN2-xTB")
-            except Exception:
-                atoms.calc = EMT()
-            
-            e_base = float(atoms.get_potential_energy()) * 0.0367493  # eV to Hartree
-            forces_ev = atoms.get_forces()  # eV/Angstrom
-            grad_base = -forces_ev * 0.0194469  # to Hartree/Bohr
-            
-            # Geometry-dependent physical excited state energy gaps Delta_E_k(R)
-            # Replaces unphysical linear shift (e_base + 0.02 * k) with geometry-dependent quadratic gap
-            r_disp = np.linalg.norm(coords - np.mean(coords, axis=0), axis=1)
-            mean_disp = float(np.mean(r_disp))
-            
-            v_energies = np.zeros(self.n_states)
-            v_energies[0] = e_base
-            for k in range(1, self.n_states):
-                # Physical non-linear excitation energy: Delta E_k = E_0_k + alpha_k * mean_disp^2
-                gap_k = 0.08 * k + 0.02 * (mean_disp ** 2)
-                v_energies[k] = e_base + gap_k
-                
-            gradients = np.zeros((self.n_states, n_atoms, 3))
-            gradients[0] = grad_base
-            for k in range(1, self.n_states):
-                # Physical state gradient: grad V_k(R) = grad V_0(R) + d(Delta E_k)/dR
-                disp_vec = (coords - np.mean(coords, axis=0)) * (0.01 * k)
-                gradients[k] = grad_base + disp_vec
-                
-            # Non-adiabatic coupling vectors d_jk = <psi_j | grad H | psi_k> / (V_k - V_j)
-            d_nacv = np.zeros((self.n_states, self.n_states, n_atoms, 3))
-            for j in range(self.n_states):
-                for k in range(j + 1, self.n_states):
-                    gap = max(abs(v_energies[k] - v_energies[j]), 1e-4)
-                    coupling_vec = (gradients[k] - gradients[j]) / gap
-                    d_nacv[j, k] = coupling_vec
-                    d_nacv[k, j] = -coupling_vec
-
-            return v_energies, gradients, d_nacv
-        except Exception as err:
-            raise ModelNotLoadedError(f"PyTorch AIMNet2-NSE weights missing and multi-state evaluation failed: {err}")
+            raise NotImplementedError("Implementation pending")
+        # 2. Raise error instead of spoofing data with EMT/algebraic shifts
+        raise ModelNotLoadedError("PyTorch AIMNet2-NSE weights missing and PySCF multi-state evaluation failed. No semi-empirical fallback available.")

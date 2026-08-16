@@ -109,8 +109,8 @@ def evaluate_hop(
         else:
             r = float(np.random.default_rng(rng).random())
     else:
-        # Enforce deterministic default seed 42 to prevent unseeded non-reproducible calls
-        r = float(np.random.default_rng(42).random())
+        # Use entropy-based RNG instead of deterministic fallback seed 42
+        r = float(np.random.default_rng().random())
 
     cum_prob = 0.0
     target_state = current_state
