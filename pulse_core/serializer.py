@@ -77,6 +77,13 @@ def serialize_swarm_to_hdf5(
         grp.attrs["provenance_tag"] = swarm_data.get("provenance_tag", "[D]")
         
     logger.info("Successfully serialized swarm trajectory data, state chaining, and rotational constants to HDF5: %s", filepath)
+    
+    # Calculate and log tracking checksum
+    try:
+        artifact_hash = calculate_artifact_sha256(filepath)
+        logger.info("Artifact Checksum (SHA-256): %s", artifact_hash)
+    except Exception as e:
+        logger.warning("Failed to calculate artifact tracking hash: %s", e)
 def calculate_artifact_sha256(filepath: str | Path) -> str:
     """Calculates SHA-256 hash of a computational artifact."""
     p = Path(filepath)

@@ -57,6 +57,12 @@ class PulseDispatcher:
         
         logger.info("Starting PULSE trajectory swarm pipeline for %d atoms (%d trajectories, %d steps).", n_atoms, n_trajectories, n_steps)
         
+        # Add performance warnings
+        if thread_percentage < 50:
+            logger.warning("Performance Warning: thread_percentage is set below 50%% (%d%%). This may bottleneck the swarm execution.", thread_percentage)
+        if not use_mps:
+            logger.warning("Performance Warning: CUDA MPS co-scheduling is disabled. GPU utilization may be suboptimal.")
+        
         # 1. Wigner Phase-Space Sampling
         coords_sampled, momenta_sampled = sample_wigner(
             coords=ref_coords,
