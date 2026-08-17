@@ -6,6 +6,7 @@ HDF5 Provenance and Trajectory Swarm Serialization Engine for PULSE.
 import logging
 import time
 from typing import Dict, Any, Optional
+from pathlib import Path
 import numpy as np
 import h5py
 
