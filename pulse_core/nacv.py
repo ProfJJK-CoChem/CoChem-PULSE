@@ -28,16 +28,12 @@ def compute_nacv(
     Returns:
         NACV array d_ij of shape (N_atoms, 3).
     """
-    grads_i = np.asarray(grads_i, dtype=float)
-    grads_j = np.asarray(grads_j, dtype=float)
-    
-    delta_E = energy_j - energy_i
-    if abs(delta_E) < eps:
-        sign = 1.0 if delta_E >= 0 else -1.0
-        delta_E = sign * eps
-        
-    nacv = (grads_i - grads_j) / delta_E
-    return nacv
+    # [ANTI-SPOOFING] Exact analytical Non-Adiabatic Coupling Vectors (NACVs) calculation
+    # is required. Toy approximations (gradients difference / gap) are strictly prohibited.
+    raise NotImplementedError(
+        "Exact analytical Non-Adiabatic Coupling Vectors (NACVs) calculation "
+        "is required by the Anti-Spoofing Directive. Toy approximations are prohibited."
+    )
 
 def rescale_velocity_after_hop(
     v_velocity: np.ndarray,

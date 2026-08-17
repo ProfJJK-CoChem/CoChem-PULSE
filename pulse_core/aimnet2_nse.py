@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class ModelNotLoadedError(Exception):
     """Raised when PyTorch AIMNet2-NSE model weights are missing and semi-empirical fallbacks are unavailable."""
-    raise NotImplementedError("Implementation pending")
+    pass
 class AIMNet2NSECalculator:
     """
     AIMNet2-NSE Neural Network Potential for Non-Adiabatic Surface Hopping (NASH).
@@ -99,19 +99,19 @@ class AIMNet2NSECalculator:
             gradients = np.zeros((self.n_states, n_atoms, 3))
             g0 = mf.nuc_grad_method().kernel()
             gradients[0] = g0
+            td_grad = td.nuc_grad_method()
             for k in range(1, self.n_states):
-                # Excited state gradient approximation
-                gradients[k] = g0 + (k * 0.01) * (coords - np.mean(coords, axis=0))
+                # Rigorous excited state gradient computation (no toy math)
+                gradients[k] = td_grad.kernel(state=k)
                 
-            d_nacv = np.zeros((self.n_states, self.n_states, n_atoms, 3))
-            for j in range(self.n_states):
-                for k in range(j + 1, self.n_states):
-                    gap = max(abs(v_energies[k] - v_energies[j]), 1e-4)
-                    coupling_vec = (gradients[k] - gradients[j]) / gap
-                    d_nacv[j, k] = coupling_vec
-                    d_nacv[k, j] = -coupling_vec
-            return v_energies, gradients, d_nacv
-        except Exception:
-            raise NotImplementedError("Implementation pending")
+            # Enforce Anti-Spoofing: NACVs must be computed rigorously (e.g. via CASSCF or CP-TDDFT)
+            raise NotImplementedError(
+                "[ANTI-SPOOFING] Exact analytical Non-Adiabatic Coupling Vectors (NACVs) calculation "
+                "via PySCF is required. Toy approximations (gradients difference / gap) are strictly prohibited."
+            )
+        except NotImplementedError as e:
+            raise e
+        except (ImportError, ModuleNotFoundError, Exception):
+            pass
         # 2. Raise error instead of spoofing data with EMT/algebraic shifts
         raise ModelNotLoadedError("PyTorch AIMNet2-NSE weights missing and PySCF multi-state evaluation failed. No semi-empirical fallback available.")
